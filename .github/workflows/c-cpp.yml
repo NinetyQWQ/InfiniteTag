@@ -1,6 +1,5 @@
 name: Build Multiple .so Libraries
 
-# 触发条件：push 代码 或 手动触发
 on:
   push:
   workflow_dispatch:
@@ -9,10 +8,8 @@ jobs:
   build-so:
     runs-on: ubuntu-latest
     strategy:
-      # 即使某个架构失败，也不影响其他架构继续编译
       fail-fast: false
       matrix:
-        # 定义目标架构及其对应的交叉编译器和系统包
         config:
           - arch: x86_64
             cc: gcc
@@ -36,21 +33,18 @@ jobs:
             cmake_system_processor: i686
 
     steps:
-      # 1. 拉取你的 C++ 代码
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. 安装对应架构的交叉编译工具链（x86_64 默认已安装，无需额外操作）
       - name: Install cross-compilation tools
         if: matrix.config.packages != ''
         run: |
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.config.packages }}
 
-      # 3. 配置 CMake（强制生成共享库）
       - name: Configure CMake
         run: |
-          cmake -B build/${{ matrix.config.arch }} \
+          cmake -B build/${{ matrix.config.arch }} -S . \
             -DCMAKE_C_COMPILER=${{ matrix.config.cc }} \
             -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }} \
             -DCMAKE_SYSTEM_NAME=Linux \
@@ -58,17 +52,13 @@ jobs:
             -DBUILD_SHARED_LIBS=ON \
             -DCMAKE_BUILD_TYPE=Release
 
-      # 4. 执行编译，生成 .so 文件
       - name: Build
         run: |
           cmake --build build/${{ matrix.config.arch }} --config Release -j $(nproc)
 
-      # 5. 上传对应架构的 .so 产物到 GitHub Actions 的 Artifacts
       - name: Upload .so artifacts
         uses: actions/upload-artifact@v4
         with:
           name: shared-libs-${{ matrix.config.arch }}
-          # 这里假设你的 .so 文件直接生成在构建目录下
-          # 如果你的项目有子目录，请修改路径，例如 build/x86_64/src/*.so
           path: build/${{ matrix.config.arch }}/*.so
           if-no-files-found: error
