@@ -1,0 +1,64 @@
+name: Build Multiple .so Libraries
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-so:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - arch: x86_64
+            cc: gcc
+            cxx: g++
+            packages: ''
+            cmake_system_processor: x86_64
+          - arch: arm64
+            cc: aarch64-linux-gnu-gcc
+            cxx: aarch64-linux-gnu-g++
+            packages: g++-aarch64-linux-gnu
+            cmake_system_processor: aarch64
+          - arch: armv7
+            cc: arm-linux-gnueabihf-gcc
+            cxx: arm-linux-gnueabihf-g++
+            packages: g++-arm-linux-gnueabihf
+            cmake_system_processor: armv7l
+          - arch: x86
+            cc: i686-linux-gnu-gcc
+            cxx: i686-linux-gnu-g++
+            packages: g++-i686-linux-gnu
+            cmake_system_processor: i686
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install cross-compilation tools
+        if: matrix.config.packages != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.config.packages }}
+
+      - name: Configure CMake
+        run: |
+          cmake -B build/${{ matrix.config.arch }} -S . \
+            -DCMAKE_C_COMPILER=${{ matrix.config.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }} \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.config.cmake_system_processor }} \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build build/${{ matrix.config.arch }} --config Release -j $(nproc)
+
+      - name: Upload .so artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-libs-${{ matrix.config.arch }}
+          path: build/${{ matrix.config.arch }}/*.so
+          if-no-files-found: error
